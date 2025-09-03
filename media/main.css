@@ -1,0 +1,36 @@
+body {
+    font-family: var(--vscode-font-family);
+    color: var(--vscode-editor-foreground);
+    background-color: var(--vscode-editor-background);
+}
+
+#chat-container {
+    padding: 10px;
+    height: calc(100vh - 40px);
+    overflow-y: auto;
+}
+
+#prompt-input {
+    width: calc(100% - 20px);
+    position: fixed;
+    bottom: 10px;
+    left: 10px;
+    border: 1px solid var(--vscode-input-border);
+    background-color: var(--vscode-input-background);
+    color: var(--vscode-input-foreground);
+    padding: 5px;
+}
+
+.user-message {
+    background-color: var(--vscode-list-active-selection-background);
+    padding: 8px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+}
+
+.bot-message {
+    background-color: var(--vscode-list-hover-background);
+    padding: 8px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+}
