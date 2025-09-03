@@ -39,48 +39,51 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getModels = getModels;
 exports.generateCompletion = generateCompletion;
 exports.chat = chat;
-const axios = __importDefault(require("axios")); // Import the Axios library for HTTP requests
-const vscode = require('vscode'); // Assuming VS Code integration is needed here, though not used in this snippet
-// Make OLLAMA_HOST configurable later or set a default value if necessary.
-const OLLAMA_HOST = 'http://localhost:11434'; 
+const axios_1 = __importDefault(require("axios"));
+const vscode = __importStar(require("vscode"));
+const OLLAMA_HOST = 'http://localhost:11434'; // Make this configurable later
 async function getModels() {
     try {
-        const response = await axios.get(`${OLLAMA_HOST}/api/tags`); // Get list of models supported by Ollama
+        const response = await axios_1.default.get(`${OLLAMA_HOST}/api/tags`);
         return response.data.models;
-    } catch (error) {
-        vscode.window.showErrorMessage('Ollama is not running or there was a network error while fetching the model list:', 'Please start Ollama and try again.');
-        throw new Error(error); // Re-throw to allow calling code to handle it, e.g., retry logic could be implemented here if needed
+    }
+    catch (error) {
+        vscode.window.showErrorMessage('Ollama is not running. Please start Ollama and try again.');
+        return [];
     }
 }
 async function generateCompletion(model, prompt) {
     try {
-        const response = await axios.post(`${OLLAMA_HOST}/api/generate`, {
-            model: model, // Model to use for generating completions
-            prompt: prompt, // Prompt text provided by the user or another part of your application
+        const response = await axios_1.default.post(`${OLLAMA_HOST}/api/generate`, {
+            model: model,
+            prompt: prompt,
             stream: false // Consider changing this to true if you want immediate responses and handling them as they come in real-time instead of waiting for the full response body.
+        }).catch(error => {
+            console.error('Network error or timeout occurred', error);
+            vscode.window.showErrorMessage('Ollama is not running, please start Ollama and try again.');
+            return ''; // Return an empty string to avoid further errors in the calling code if this function's response was critical for subsequent operations.
         });
         
         return response.data.response;
     } catch (error) {
-        consoles.log('Network error or timeout occurred:', error); // Log network errors to help with debugging issues related to connectivity and API availability
-        vscode.window.showErrorMessage('An unexpected error occurred while generating completion suggestions, please try again later or check your internet connection.:');
-        return ''; // Return an empty string as a fallback in case of critical failures affecting subsequent operations that rely on completions being generated successfully
+        console.error(error);
+        vscode.window.showErrorMessage('An unexpected error occurred while generating completion suggestions:', 'Please try again later or check your internet connection.');
+        // Return an empty string to avoid further errors in the calling code if this function's response was critical for subsequent operations, but handle it differently here as you might want some form of retry logic depending on how crucial these completions are:
+        return ''; 
     }
 }
-
 async function chat(model, messages) {
     try {
-        const response = await axios.post(`${OLLAMA_HOST}/api/chat`, {
-            model: model, // Model used in conversation with Ollama
-            messages: messages, // Array of user-generated or predefined chat messages to send through the API
-            stream: false // Consider changing this to true if you want immediate responses and handling them as they come in real-time instead of waiting for full response body.
+        const response = await axios_1.default.post(`${OLLAMA_HOST}/api/chat`, {
+            model: model,
+            messages: messages,
+            stream: false
         });
-        
         return response.data.message;
-    } catch (error) {
-        console.log('An unexpected error occurred while chatting with Ollama:', error); // Log errors to assist debugging chat functionality issues
-        vscode.window.showErrorMessage('A problem occurred during the conversation, please try again later or check your internet connection.:');
-        return null; // Returning `null` here indicates that there was an issue which might require user intervention or retry logic in calling code if necessary
+    }
+    catch (error) {
+        console.error(error);
+        return null;
     }
 }
 //# sourceMappingURL=ollama.js.map
