@@ -41,6 +41,22 @@ const chatView_1 = require("./chatView");
 let selectedModel;
 let chatHistory = [];
 let chatRequestController;
+// Function to silently warm up the Ollama model
+async function warmUpOllama(model) {
+    console.log(`[Extension] Warming up model: ${model}`);
+    try {
+        const controller = new AbortController();
+        // Set a timeout to avoid waiting forever on a stuck model
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds
+        await (0, ollama_1.generateCompletion)(model, ' ', controller.signal);
+        clearTimeout(timeoutId);
+        console.log(`[Extension] Model ${model} is warm.`);
+    }
+    catch (error) {
+        // Suppress errors, as this is a background task
+        console.error(`[Extension] Error warming up model ${model}:`, error);
+    }
+}
 function activate(context) {
     console.log('Congratulations, your extension "ollama-copilot" is now active!');
     const chatViewProvider = new chatView_1.ChatViewProvider(context.extensionUri);
@@ -54,6 +70,8 @@ function activate(context) {
             if (!selectedModel) {
                 selectedModel = models[0].name;
                 console.log(`[Extension] No model selected, defaulting to: ${selectedModel}`);
+                // Initial warm-up on activation
+                warmUpOllama(selectedModel);
             }
             modelStatusBarItem.text = `$(chip) ${selectedModel}`;
             modelStatusBarItem.tooltip = `Ollama Model: ${selectedModel}`;
@@ -71,10 +89,12 @@ function activate(context) {
         if (models.length > 0) {
             const modelNames = models.map((model) => model.name);
             const chosenModel = await vscode.window.showQuickPick(modelNames, { placeHolder: 'Select an Ollama model' });
-            if (chosenModel) {
+            if (chosenModel && chosenModel !== selectedModel) {
                 console.log(`[Extension] User selected model: ${chosenModel}`);
                 selectedModel = chosenModel;
                 updateStatusBar();
+                // Warm up the new model
+                warmUpOllama(chosenModel);
             }
         }
     });

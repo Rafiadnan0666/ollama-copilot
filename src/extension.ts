@@ -6,6 +6,24 @@ let selectedModel: string | undefined;
 let chatHistory: { role: string, content: string }[] = [];
 let chatRequestController: AbortController | undefined;
 
+// Function to silently warm up the Ollama model
+async function warmUpOllama(model: string) {
+    console.log(`[Extension] Warming up model: ${model}`);
+    try {
+        const controller = new AbortController();
+        // Set a timeout to avoid waiting forever on a stuck model
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds
+        
+        await generateCompletion(model, ' ', controller.signal);
+        clearTimeout(timeoutId);
+        
+        console.log(`[Extension] Model ${model} is warm.`);
+    } catch (error) {
+        // Suppress errors, as this is a background task
+        console.error(`[Extension] Error warming up model ${model}:`, error);
+    }
+}
+
 export function activate(context: vscode.ExtensionContext) {
 
     console.log('Congratulations, your extension "ollama-copilot" is now active!');
@@ -23,6 +41,8 @@ export function activate(context: vscode.ExtensionContext) {
             if (!selectedModel) {
                 selectedModel = models[0].name;
                 console.log(`[Extension] No model selected, defaulting to: ${selectedModel}`);
+                // Initial warm-up on activation
+                warmUpOllama(selectedModel);
             }
             modelStatusBarItem.text = `$(chip) ${selectedModel}`;
             modelStatusBarItem.tooltip = `Ollama Model: ${selectedModel}`;
@@ -40,10 +60,12 @@ export function activate(context: vscode.ExtensionContext) {
         if (models.length > 0) {
             const modelNames = models.map((model) => model.name);
             const chosenModel = await vscode.window.showQuickPick(modelNames, { placeHolder: 'Select an Ollama model' });
-            if (chosenModel) {
+            if (chosenModel && chosenModel !== selectedModel) {
                 console.log(`[Extension] User selected model: ${chosenModel}`);
                 selectedModel = chosenModel;
                 updateStatusBar();
+                // Warm up the new model
+                warmUpOllama(chosenModel);
             }
         }
     });
