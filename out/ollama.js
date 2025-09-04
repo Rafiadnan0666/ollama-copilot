@@ -39,51 +39,118 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getModels = getModels;
 exports.generateCompletion = generateCompletion;
 exports.chat = chat;
+exports.streamChat = streamChat;
 const axios_1 = __importDefault(require("axios"));
 const vscode = __importStar(require("vscode"));
 const OLLAMA_HOST = 'http://localhost:11434'; // Make this configurable later
 async function getModels() {
+    console.log('[Ollama] Fetching models...');
     try {
         const response = await axios_1.default.get(`${OLLAMA_HOST}/api/tags`);
+        console.log('[Ollama] Models fetched successfully.');
         return response.data.models;
     }
     catch (error) {
+        console.error('!!! [Ollama] FAILED to fetch models:', error);
         vscode.window.showErrorMessage('Ollama is not running. Please start Ollama and try again.');
         return [];
     }
 }
-async function generateCompletion(model, prompt) {
+async function generateCompletion(model, prompt, signal) {
+    console.log(`[Ollama] Generating completion for model: ${model}`);
     try {
         const response = await axios_1.default.post(`${OLLAMA_HOST}/api/generate`, {
             model: model,
             prompt: prompt,
-            stream: false // Consider changing this to true if you want immediate responses and handling them as they come in real-time instead of waiting for the full response body.
-        }).catch(error => {
-            console.error('Network error or timeout occurred', error);
-            vscode.window.showErrorMessage('Ollama is not running, please start Ollama and try again.');
-            return ''; // Return an empty string to avoid further errors in the calling code if this function's response was critical for subsequent operations.
+            stream: false
+        }, {
+            signal: signal
         });
-        
+        console.log('[Ollama] Completion generated successfully.');
         return response.data.response;
-    } catch (error) {
-        console.error(error);
-        vscode.window.showErrorMessage('An unexpected error occurred while generating completion suggestions:', 'Please try again later or check your internet connection.');
-        // Return an empty string to avoid further errors in the calling code if this function's response was critical for subsequent operations, but handle it differently here as you might want some form of retry logic depending on how crucial these completions are:
-        return ''; 
+    }
+    catch (error) {
+        if (axios_1.default.isCancel(error)) {
+            console.log('[Ollama] Completion request canceled:', error.message);
+            return '';
+        }
+        vscode.window.showErrorMessage(`Error generating completion: ${error}`);
+        console.error('!!! [Ollama] FAILED to generate completion:', error);
+        return '';
     }
 }
-async function chat(model, messages) {
+async function chat(model, messages, signal) {
+    console.log(`[Ollama] Starting non-streaming chat for model: ${model}`);
     try {
         const response = await axios_1.default.post(`${OLLAMA_HOST}/api/chat`, {
             model: model,
             messages: messages,
             stream: false
+        }, {
+            signal: signal
         });
+        console.log('[Ollama] Non-streaming chat finished successfully.');
         return response.data.message;
     }
     catch (error) {
-        console.error(error);
+        if (axios_1.default.isCancel(error)) {
+            console.log('[Ollama] Non-streaming chat request canceled:', error.message);
+            return null;
+        }
+        vscode.window.showErrorMessage(`Error in chat: ${error}`);
+        console.error('!!! [Ollama] FAILED non-streaming chat:', error);
         return null;
     }
+}
+async function streamChat(model, messages, signal, onData) {
+    console.log(`[Ollama] Starting stream chat for model: ${model}`);
+    return new Promise(async (resolve, reject) => {
+        try {
+            const response = await axios_1.default.post(`${OLLAMA_HOST}/api/chat`, {
+                model: model,
+                messages: messages,
+                stream: true
+            }, {
+                signal: signal,
+                responseType: 'stream'
+            });
+            let buffer = '';
+            response.data.on('data', (chunk) => {
+                buffer += chunk.toString();
+                let lines = buffer.split('\n');
+                buffer = lines.pop() || ''; // Keep the last partial line
+                for (const line of lines) {
+                    if (line.trim() === '')
+                        continue;
+                    try {
+                        const parsed = JSON.parse(line);
+                        if (parsed.message && typeof parsed.message.content !== 'undefined') {
+                            onData(parsed.message.content);
+                        }
+                    }
+                    catch (e) {
+                        console.error('[Ollama] Error parsing stream chunk:', e);
+                    }
+                }
+            });
+            response.data.on('end', () => {
+                console.log('[Ollama] Chat stream ended.');
+                resolve();
+            });
+            response.data.on('error', (err) => {
+                console.error('!!! [Ollama] Chat stream errored:', err);
+                reject(err);
+            });
+        }
+        catch (error) {
+            if (axios_1.default.isCancel(error)) {
+                console.log('[Ollama] Chat stream request canceled by user.');
+                return resolve();
+            }
+            vscode.window.showErrorMessage(`Error in chat stream: ${error}`);
+            console.error('!!! [Ollama] FAILED to start chat stream:', error);
+            reject(error);
+        }
+    });
 }
 //# sourceMappingURL=ollama.js.map
